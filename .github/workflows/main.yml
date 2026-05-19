@@ -1,0 +1,46 @@
+name: QEMU OpenGL Test
+
+on:
+  push:
+
+jobs:
+  qemu-opengl:
+    runs-on: ubuntu-bionic
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup OpenGL
+        uses: openrndr/setup-opengl@v1.1
+
+      - name: Install QEMU and tools
+        run: |
+          sudo apt update
+          sudo apt install -y \
+            qemu-system-x86 \
+            mesa-utils \
+            xvfb
+
+      - name: Check OpenGL
+        run: |
+          xvfb-run glxinfo | grep "OpenGL"
+
+      - name: Create test disk
+        run: |
+          qemu-img create -f qcow2 test.img 2G
+
+      - name: Run QEMU with OpenGL
+        run: |
+          xvfb-run qemu-system-x86_64 \
+            -machine accel=kvm \
+            -m 2048 \
+            -display gtk,gl=on \
+            -vga virtio \
+            -drive file=test.img,format=qcow2 \
+            -serial stdio \
+            -daemonize
+
+      - name: Verify QEMU started
+        run: |
+          ps aux | grep qemu
