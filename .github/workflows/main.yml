@@ -1,11 +1,11 @@
-name: macOS Browser Remote Desktop
+name: macOS noVNC Remote Desktop
 
 on:
   workflow_dispatch:
   push:
 
 jobs:
-  macos-remote:
+  remote-desktop:
     runs-on: macos-latest
     timeout-minutes: 60
 
@@ -13,23 +13,32 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Enable macOS VNC
+      - name: Create Test User
+        run: |
+          sudo sysadminctl -addUser testuser \
+            -password testpass \
+            -home /Users/testuser || true
+
+      - name: Enable macOS Screen Sharing
         run: |
           sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
             -activate \
             -configure \
             -access -on \
-            -clientopts -setvnclegacy -vnclegacy yes \
-            -clientopts -setvncpw -vncpw password \
-            -restart -agent \
-            -privs -all
+            -users testuser \
+            -privs -all \
+            -restart -agent
+
+          sudo launchctl kickstart -k system/com.apple.screensharing
+
+          sleep 10
 
       - name: Verify VNC Port
         run: |
           echo "Checking VNC..."
-          
+
           lsof -iTCP -sTCP:LISTEN | grep 5900 || true
-          
+
           netstat -an | grep 5900 || true
 
       - name: Launch GUI Apps
@@ -37,16 +46,14 @@ jobs:
           open -a Finder
           open -a Safari
           open -a TextEdit
-          
+
           osascript -e 'tell application "Finder" to activate'
-          
+
           sleep 20
 
       - name: Take Screenshot
         run: |
           screencapture desktop.png
-          
-          ls
 
       - name: Upload Screenshot
         uses: actions/upload-artifact@v4
@@ -57,8 +64,6 @@ jobs:
       - name: Clone noVNC
         run: |
           git clone https://github.com/novnc/noVNC.git
-          
-          git clone https://github.com/novnc/websockify.git
 
       - name: Start noVNC
         run: |
@@ -67,8 +72,8 @@ jobs:
           chmod +x utils/novnc_proxy
 
           nohup ./utils/novnc_proxy \
-            --vnc localhost:5900 \
             --listen 6080 \
+            --vnc localhost:5900 \
             > ../novnc.log 2>&1 &
 
           sleep 15
@@ -89,14 +94,16 @@ jobs:
 
           cat tunnel.log
 
-      - name: Show Browser URL
+      - name: Show Login Info
         run: |
           echo ""
-          echo "Open the Cloudflare URL above in your browser"
-          echo "Then connect using password: password"
+          echo "Open the Cloudflare URL shown above"
+          echo ""
+          echo "Username: testuser"
+          echo "Password: testpass"
 
       - name: Keep Runner Alive
         run: |
-          echo "Keeping macOS desktop online..."
-          
+          echo "Keeping remote desktop alive..."
+
           sleep 3600
