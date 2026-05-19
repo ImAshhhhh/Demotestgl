@@ -1,16 +1,16 @@
-name: macOS Browser Desktop
+name: macOS Browser Remote Desktop
 
 on:
   workflow_dispatch:
   push:
 
 jobs:
-  browser-desktop:
+  macos-remote:
     runs-on: macos-latest
     timeout-minutes: 60
 
     steps:
-      - name: Checkout
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
       - name: Enable macOS VNC
@@ -24,52 +24,73 @@ jobs:
             -restart -agent \
             -privs -all
 
-      - name: Install noVNC
+      - name: Verify VNC Port
         run: |
-          brew install novnc websockify
+          echo "Checking VNC status..."
+          
+          lsof -iTCP -sTCP:LISTEN | grep 5900 || true
+          
+          netstat -an | grep 5900 || true
 
-      - name: Start GUI Apps
+      - name: Launch macOS GUI Apps
         run: |
           open -a Finder
           open -a Safari
+          open -a TextEdit
           
-          sleep 15
+          osascript -e 'tell application "Finder" to activate'
+          
+          sleep 20
 
-      - name: Start noVNC
-        run: |
-          nohup /opt/homebrew/opt/novnc/bin/novnc_server \
-            --vnc localhost:5900 \
-            --listen 6080 \
-            > novnc.log 2>&1 &
-
-          sleep 10
-
-          cat novnc.log || true
-
-      - name: Install cloudflared
-        run: |
-          brew install cloudflared
-
-      - name: Expose noVNC to Internet
-        run: |
-          nohup cloudflared tunnel \
-            --url http://localhost:6080 \
-            > tunnel.log 2>&1 &
-
-          sleep 15
-
-          cat tunnel.log
-
-      - name: Screenshot
+      - name: Take Desktop Screenshot
         run: |
           screencapture desktop.png
+          
+          ls
 
       - name: Upload Screenshot
         uses: actions/upload-artifact@v4
         with:
-          name: desktop
+          name: macos-desktop
           path: desktop.png
+
+      - name: Clone noVNC
+        run: |
+          git clone https://github.com/novnc/noVNC.git
+          
+          git clone https://github.com/novnc/websockify.git
+
+      - name: Start noVNC Server
+        run: |
+          cd noVNC
+          
+          chmod +x utils/novnc_proxy
+          
+          nohup python3 utils/novnc_proxy \
+            --vnc localhost:5900 \
+            --listen 6080 \
+            > ../novnc.log 2>&1 &
+          
+          sleep 15
+          
+          cat ../novnc.log || true
+
+      - name: Install Cloudflare Tunnel
+        run: |
+          brew install cloudflared
+
+      - name: Expose Browser Desktop
+        run: |
+          nohup cloudflared tunnel \
+            --url http://localhost:6080 \
+            > tunnel.log 2>&1 &
+          
+          sleep 20
+          
+          cat tunnel.log
 
       - name: Keep Runner Alive
         run: |
+          echo "Remote desktop active..."
+          
           sleep 3600
