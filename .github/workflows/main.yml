@@ -1,32 +1,73 @@
-name: macOS Screenshot Commit
+name: macOS VNC Test
 
 on:
   push:
+  workflow_dispatch:
 
 jobs:
-  screenshot:
+  vnc-test:
     runs-on: macos-latest
-
-    permissions:
-      contents: write
+    timeout-minutes: 30
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Configure Git
+      - name: Enable macOS Screen Sharing (VNC)
         run: |
-          git config --global user.name "github-actions"
-          git config --global user.email "actions@github.com"
+          sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
+            -activate \
+            -configure \
+            -access -on \
+            -clientopts -setvnclegacy -vnclegacy yes \
+            -clientopts -setvncpw -vncpw password \
+            -restart -agent \
+            -privs -all
+
+      - name: Verify ARDAgent
+        run: |
+          ps aux | grep ARDAgent || true
+
+      - name: Check VNC Port
+        run: |
+          echo "Checking port 5900..."
+          
+          lsof -iTCP -sTCP:LISTEN | grep 5900 || true
+          
+          netstat -an | grep 5900 || true
+
+      - name: Install Cloudflare Tunnel
+        run: |
+          brew install cloudflared
+
+      - name: Start Cloudflare TCP Tunnel
+        run: |
+          nohup cloudflared tunnel --url tcp://localhost:5900 > tunnel.log 2>&1 &
+          
+          sleep 15
+          
+          cat tunnel.log || true
+
+      - name: Open Safari
+        run: |
+          open -a Safari
+          sleep 5
 
       - name: Take Screenshot
         run: |
           mkdir -p screenshots
-          screencapture screenshots/macos-desktop.png
+          
+          screencapture screenshots/macos-vnc-test.png
+          
+          ls screenshots
 
-      - name: Commit Screenshot
+      - name: Upload Screenshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-vnc-test
+          path: screenshots/macos-vnc-test.png
+
+      - name: Keep Runner Alive
         run: |
-          git add screenshots/macos-desktop.png
-          
-          git commit -m "Add macOS screenshot" || echo "No changes"
-          
-          git push
+          echo "Runner alive for VNC testing..."
+          sleep 1200
