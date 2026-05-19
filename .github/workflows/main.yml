@@ -1,36 +1,32 @@
-name: macOS QEMU Test
+name: macOS Screenshot Commit
 
 on:
   push:
 
 jobs:
-  qemu-macos:
+  screenshot:
     runs-on: macos-latest
 
+    permissions:
+      contents: write
+
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Install QEMU
+      - name: Configure Git
         run: |
-          brew install qemu
+          git config --global user.name "github-actions"
+          git config --global user.email "actions@github.com"
 
-      - name: Check QEMU
+      - name: Take Screenshot
         run: |
-          qemu-system-x86_64 --version
+          mkdir -p screenshots
+          screencapture screenshots/macos-desktop.png
 
-      - name: Create test disk
+      - name: Commit Screenshot
         run: |
-          qemu-img create -f qcow2 test.img 2G
-
-      - name: Start QEMU with OpenGL
-        run: |
-          qemu-system-x86_64 \
-            -m 2048 \
-            -display cocoa,gl=on \
-            -device virtio-vga-gl \
-            -drive file=test.img,format=qcow2 &
+          git add screenshots/macos-desktop.png
           
-          sleep 10
+          git commit -m "Add macOS screenshot" || echo "No changes"
           
-          ps aux | grep qemu
+          git push
