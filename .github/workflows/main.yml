@@ -26,13 +26,13 @@ jobs:
 
       - name: Verify VNC Port
         run: |
-          echo "Checking VNC status..."
+          echo "Checking VNC..."
           
           lsof -iTCP -sTCP:LISTEN | grep 5900 || true
           
           netstat -an | grep 5900 || true
 
-      - name: Launch macOS GUI Apps
+      - name: Launch GUI Apps
         run: |
           open -a Finder
           open -a Safari
@@ -42,7 +42,7 @@ jobs:
           
           sleep 20
 
-      - name: Take Desktop Screenshot
+      - name: Take Screenshot
         run: |
           screencapture desktop.png
           
@@ -60,37 +60,43 @@ jobs:
           
           git clone https://github.com/novnc/websockify.git
 
-      - name: Start noVNC Server
+      - name: Start noVNC
         run: |
           cd noVNC
-          
+
           chmod +x utils/novnc_proxy
-          
-          nohup python3 utils/novnc_proxy \
+
+          nohup ./utils/novnc_proxy \
             --vnc localhost:5900 \
             --listen 6080 \
             > ../novnc.log 2>&1 &
-          
+
           sleep 15
-          
+
           cat ../novnc.log || true
 
       - name: Install Cloudflare Tunnel
         run: |
           brew install cloudflared
 
-      - name: Expose Browser Desktop
+      - name: Expose noVNC
         run: |
           nohup cloudflared tunnel \
             --url http://localhost:6080 \
             > tunnel.log 2>&1 &
-          
+
           sleep 20
-          
+
           cat tunnel.log
+
+      - name: Show Browser URL
+        run: |
+          echo ""
+          echo "Open the Cloudflare URL above in your browser"
+          echo "Then connect using password: password"
 
       - name: Keep Runner Alive
         run: |
-          echo "Remote desktop active..."
+          echo "Keeping macOS desktop online..."
           
           sleep 3600
