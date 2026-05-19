@@ -1,19 +1,19 @@
-name: macOS VNC Test
+name: macOS Browser Desktop
 
 on:
-  push:
   workflow_dispatch:
+  push:
 
 jobs:
-  vnc-test:
+  browser-desktop:
     runs-on: macos-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Enable macOS Screen Sharing (VNC)
+      - name: Enable macOS VNC
         run: |
           sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
             -activate \
@@ -24,50 +24,52 @@ jobs:
             -restart -agent \
             -privs -all
 
-      - name: Verify ARDAgent
+      - name: Install noVNC
         run: |
-          ps aux | grep ARDAgent || true
+          brew install novnc websockify
 
-      - name: Check VNC Port
+      - name: Start GUI Apps
         run: |
-          echo "Checking port 5900..."
+          open -a Finder
+          open -a Safari
           
-          lsof -iTCP -sTCP:LISTEN | grep 5900 || true
-          
-          netstat -an | grep 5900 || true
+          sleep 15
 
-      - name: Install Cloudflare Tunnel
+      - name: Start noVNC
+        run: |
+          nohup /opt/homebrew/opt/novnc/bin/novnc_server \
+            --vnc localhost:5900 \
+            --listen 6080 \
+            > novnc.log 2>&1 &
+
+          sleep 10
+
+          cat novnc.log || true
+
+      - name: Install cloudflared
         run: |
           brew install cloudflared
 
-      - name: Start Cloudflare TCP Tunnel
+      - name: Expose noVNC to Internet
         run: |
-          nohup cloudflared tunnel --url tcp://localhost:5900 > tunnel.log 2>&1 &
-          
+          nohup cloudflared tunnel \
+            --url http://localhost:6080 \
+            > tunnel.log 2>&1 &
+
           sleep 15
-          
-          cat tunnel.log || true
 
-      - name: Open Safari
-        run: |
-          open -a Safari
-          sleep 5
+          cat tunnel.log
 
-      - name: Take Screenshot
+      - name: Screenshot
         run: |
-          mkdir -p screenshots
-          
-          screencapture screenshots/macos-vnc-test.png
-          
-          ls screenshots
+          screencapture desktop.png
 
       - name: Upload Screenshot
         uses: actions/upload-artifact@v4
         with:
-          name: macos-vnc-test
-          path: screenshots/macos-vnc-test.png
+          name: desktop
+          path: desktop.png
 
       - name: Keep Runner Alive
         run: |
-          echo "Runner alive for VNC testing..."
-          sleep 1200
+          sleep 3600
